@@ -1,0 +1,32 @@
+# Dependances
+node_modules/
+
+# Build / sortie Vite
+dist/
+*.local
+
+# Cache Vite
+.vite/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+*.log
+
+# Variables d'environnement
+.env
+.env.*
+!.env.example
+
+# Fichiers OS
+.DS_Store
+Thumbs.db
+
+# Editeurs / IDE
+.vscode/
+.idea/
+*.swp
+*~

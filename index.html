@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vector World — montagnes rétro</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #87a9c4; }
+      /* Rendu net facon retro : pas de lissage sur l'upscale du canvas */
+      canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+
+      #overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        background: rgba(0, 0, 0, 0.45);
+        color: #f0f0f0;
+        font-family: "Courier New", monospace;
+        text-align: center;
+        cursor: pointer;
+        user-select: none;
+        z-index: 10;
+      }
+      #overlay h1 { font-size: 28px; letter-spacing: 2px; text-shadow: 2px 2px 0 #000; }
+      #overlay p { font-size: 14px; opacity: 0.85; line-height: 1.6; }
+      #overlay .start { margin-top: 8px; font-size: 16px; border: 2px solid #f0f0f0; padding: 8px 18px; }
+      #overlay.hidden { display: none; }
+
+      #crosshair {
+        position: absolute;
+        top: 50%; left: 50%;
+        width: 10px; height: 10px;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 5;
+      }
+      #crosshair::before, #crosshair::after {
+        content: ""; position: absolute; background: rgba(255, 255, 255, 0.8);
+      }
+      #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+      #crosshair::after  { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+
+      #hud {
+        position: absolute; left: 10px; bottom: 10px;
+        font-family: "Courier New", monospace; font-size: 12px;
+        color: #f0f0f0; text-shadow: 1px 1px 0 #000; z-index: 5;
+      }
+
+      /* --- Menu pixel-art (bas a droite) --- */
+      #menu {
+        position: absolute; right: 10px; bottom: 10px; z-index: 20;
+        font-family: "Courier New", monospace; font-size: 12px; color: #cfe6f5;
+      }
+      #menu button, #menu input { font-family: inherit; }
+      #menu-toggle {
+        display: block; margin-left: auto;
+        background: #0c2236; color: #cfe6f5; border: 2px solid #2f7fb5;
+        padding: 5px 10px; cursor: pointer; letter-spacing: 1px;
+        box-shadow: 3px 3px 0 #06121d;
+      }
+      #menu-panel {
+        margin-top: 6px; width: 232px; background: #0a1c2e;
+        border: 2px solid #2f7fb5; box-shadow: 4px 4px 0 #06121d; padding: 8px;
+      }
+      .menu-row {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 8px; margin: 4px 0;
+      }
+      .menu-row > span { flex: 1; }
+      .menu-tgl {
+        min-width: 42px; background: #3a1e2a; color: #e0b8c0;
+        border: 2px solid #7a3b4d; cursor: pointer; padding: 2px 6px;
+      }
+      .menu-tgl.on { background: #14402a; color: #9be0b8; border-color: #2f8f5a; }
+      .menu-sep { text-align: center; color: #5a8fb5; margin: 8px 0 4px; letter-spacing: 1px; }
+      .menu-seed { width: 90px; background: #06121d; color: #cfe6f5; border: 2px solid #2f7fb5; padding: 2px 4px; }
+      .menu-buttons { gap: 6px; }
+      .menu-btn, .menu-row input[type="range"] { flex: 1; }
+      .menu-btn {
+        background: #0c2236; color: #cfe6f5; border: 2px solid #2f7fb5;
+        cursor: pointer; padding: 4px 6px; box-shadow: 2px 2px 0 #06121d;
+      }
+      .menu-btn:active, #menu-toggle:active { transform: translate(2px, 2px); box-shadow: none; }
+      #menu input[type="range"] { accent-color: #2f7fb5; }
+
+      /* --- Editeur de heightmap --- */
+      #hm-editor {
+        position: absolute; inset: 0; z-index: 30;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(2, 10, 18, 0.75);
+        font-family: "Courier New", monospace; font-size: 12px; color: #cfe6f5;
+      }
+      .hm-panel {
+        background: #0a1c2e; border: 2px solid #2f7fb5; box-shadow: 6px 6px 0 #06121d;
+        padding: 12px; width: 360px; display: flex; flex-direction: column; gap: 6px;
+      }
+      .hm-title { text-align: center; letter-spacing: 2px; color: #7fc2e6; margin-bottom: 4px; }
+      .hm-canvas {
+        width: 336px; height: 336px; align-self: center; cursor: crosshair;
+        image-rendering: pixelated; border: 2px solid #2f7fb5; background: #000; touch-action: none;
+      }
+      .hm-row { display: flex; align-items: center; gap: 8px; }
+      .hm-row > span { width: 78px; }
+      .hm-row input[type="range"] { flex: 1; accent-color: #2f7fb5; }
+      .hm-panel button, .hm-file {
+        background: #0c2236; color: #cfe6f5; border: 2px solid #2f7fb5;
+        cursor: pointer; padding: 4px 8px; box-shadow: 2px 2px 0 #06121d; flex: 1; text-align: center;
+      }
+      .hm-file-wide { width: 100%; }
+      .hm-panel button.hm-on { background: #14402a; color: #9be0b8; border-color: #2f8f5a; }
+      .hm-apply { background: #14402a !important; color: #9be0b8 !important; border-color: #2f8f5a !important; }
+      .hm-actions { margin-top: 4px; }
+      .hm-hint { text-align: center; color: #5a8fb5; }
+    </style>
+  </head>
+  <body>
+    <div id="crosshair"></div>
+    <div id="hud"></div>
+    <div id="overlay">
+      <h1>VECTOR WORLD</h1>
+      <p>
+        ZQSD / WASD — se deplacer&nbsp;&nbsp;|&nbsp;&nbsp;Souris — regarder<br />
+        Espace — sauter&nbsp;&nbsp;|&nbsp;&nbsp;Maj — courir&nbsp;&nbsp;|&nbsp;&nbsp;Echap — liberer la souris<br />
+        F — voler&nbsp;&nbsp;(en vol : Espace monter, Ctrl/C descendre)
+      </p>
+      <div class="start">Cliquer pour entrer dans le monde</div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
