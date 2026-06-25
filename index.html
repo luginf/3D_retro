@@ -8,7 +8,9 @@
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { width: 100%; height: 100%; overflow: hidden; background: #87a9c4; }
       /* Rendu net facon retro : pas de lissage sur l'upscale du canvas */
-      canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+      /* touch-action none : indispensable pour que le glissement "regarder"
+         genere des pointermove au lieu d'un defilement de page sur mobile */
+      canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
 
       #overlay {
         position: absolute;
@@ -60,33 +62,22 @@
         pointer-events: none;
       }
 
-      /* --- Commandes tactiles --- */
+      /* --- Commandes tactiles (canvas pixelises) --- */
       #touch { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
-      #touch > * { pointer-events: auto; touch-action: none; }
-      .touch-joy {
-        position: absolute; left: 24px; bottom: 24px; width: 130px; height: 130px;
-        border-radius: 50%; border: 3px solid rgba(127, 194, 230, 0.7);
-        background: rgba(10, 28, 46, 0.35);
-        display: flex; align-items: center; justify-content: center;
-      }
-      .touch-knob {
-        width: 56px; height: 56px; border-radius: 50%;
-        background: rgba(127, 194, 230, 0.8); border: 2px solid #2f7fb5;
-      }
-      .touch-btn {
-        position: absolute; width: 64px; height: 64px; border-radius: 50%;
-        font-family: "Courier New", monospace; font-size: 22px; color: #cfe6f5;
-        background: rgba(12, 34, 54, 0.7); border: 3px solid #2f7fb5;
-        display: flex; align-items: center; justify-content: center; user-select: none;
-      }
-      .touch-btn:active { background: rgba(47, 127, 181, 0.7); }
+      #touch > * { pointer-events: auto; }
+      /* touch-action none sur TOUS les descendants (knob inclus) : sinon le
+         navigateur prend le geste pour un defilement et annule le joystick */
+      #touch * { touch-action: none; }
+      .touch-ctl { position: absolute; user-select: none; }
+      .touch-ctl:active { filter: brightness(1.4); }
+      .touch-bg { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+      .touch-knob-cv { position: absolute; image-rendering: pixelated; }
+      .touch-joy { left: 24px; bottom: 24px; }
       .touch-jump { right: 28px; bottom: 32px; }
-      .touch-fire { right: 104px; bottom: 64px; background: rgba(74, 26, 26, 0.7); border-color: #b35; color: #ffd0c4; }
+      .touch-fire { right: 104px; bottom: 64px; }
       .touch-up { right: 110px; bottom: 140px; }
       .touch-down { right: 28px; bottom: 140px; }
-      .touch-pause {
-        left: 16px; top: 16px; width: 48px; height: 48px; font-size: 16px;
-      }
+      .touch-pause { left: 16px; top: 16px; }
 
       /* --- Menu pixel-art (bas a droite) --- */
       #menu {
@@ -103,6 +94,9 @@
       #menu-panel {
         margin-top: 6px; width: 232px; background: #0a1c2e;
         border: 2px solid #2f7fb5; box-shadow: 4px 4px 0 #06121d; padding: 8px;
+        /* scrollable si le menu depasse l'ecran (mobile) */
+        max-height: 75vh; overflow-y: auto; overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch; touch-action: pan-y;
       }
       .menu-row {
         display: flex; align-items: center; justify-content: space-between;

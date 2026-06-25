@@ -13,7 +13,8 @@ Clique sur l'écran pour verrouiller la souris et commencer.
 
 | Touche | Action |
 |---|---|
-| `Z`/`W` `Q`/`A` `S` `D` | Se déplacer (clavier FR & EN) |
+| `Z/W` `Q/A` `S` `D` ou flèches | Se déplacer |
+| `A`/`Q` et `E` | Pivoter sur soi-même (gauche / droite) |
 | Souris | Regarder |
 | `Espace` | Sauter |
 | `Maj` | Courir (ou boost en vol) |
@@ -51,8 +52,11 @@ Tout se règle en direct, sans toucher au code. Les choix sont **mémorisés**
   remettre `swordEnabled = true` dans `combat.js` pour la réactiver.)*
 - **Commandes tactiles** — pour smartphone/tablette : joystick virtuel (bas
   gauche) pour se déplacer, **glissement** sur l'écran pour viser, boutons saut /
-  tir / monter-descendre, bouton pause. Activé automatiquement sur écran tactile,
+  tir / monter-descendre, bouton pause. Les boutons sont **pixelisés** à la même
+  résolution que le slider *Pixels*. Activé automatiquement sur écran tactile,
   ou via le menu sur n'importe quel appareil.
+- **Clavier AZERTY** — adapte les libellés d'aide (ZQSD / A‑E) au lieu de WASD /
+  Q‑E. Les touches physiques sont les mêmes ; ce réglage change surtout l'affichage.
 - **Cycle jour/nuit** — animation automatique du soleil (et de la lune la nuit)
 - **Torche** — lumière chaude qui éclaire les environs proches, forte la nuit
 - **Infos FPS** — HUD en bas à gauche

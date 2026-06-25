@@ -15,6 +15,7 @@ import { WATER_LEVEL } from './config.js';
 // Tactile par defaut si l'entree principale est "grossiere" (doigt) : vise
 // telephones / tablettes, pas les PC a ecran tactile avec souris.
 const IS_TOUCH = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+const IS_FR = (navigator.language || '').toLowerCase().startsWith('fr');
 
 const FOG_GREY = 0x808080;
 
@@ -23,7 +24,7 @@ const DEFAULTS = {
   wireframe: true, dither: true, colorMode: false, scanlines: true, vignette: true,
   trees: true, water: true, clouds: true, audio: false,
   dayNightAuto: true, hud: true, flying: false, combat: false, touch: IS_TOUCH,
-  torch: true, timeOfDay: 0.3, pixelScale: 0.5,
+  torch: true, azerty: IS_FR, timeOfDay: 0.3, pixelScale: 0.5,
 };
 function loadSettings() {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('vw-settings') || '{}') }; }
@@ -115,6 +116,7 @@ function applyPixelScale(v) {
   renderer.setSize(innerWidth, innerHeight);
   composer.setPixelRatio(v);
   composer.setSize(innerWidth, innerHeight);
+  touch.setPixelScale(v); // controles tactiles a la meme resolution
 }
 
 // --- Audio + editeur de heightmap ----------------------------------------
@@ -128,9 +130,20 @@ const editor = createHeightmapEditor((getHeightFn) => {
 const overlay = document.getElementById('overlay');
 const hud = document.getElementById('hud');
 const startEl = overlay.querySelector('.start');
+const helpEl = overlay.querySelector('p');
 let started = false;
 let lastUnlock = 0;
 let touchActive = false; // etat "en jeu" en mode tactile (sans pointer lock)
+
+// Aide adaptee a la disposition clavier (memes touches physiques, libelles differents).
+function updateControlsHelp(azerty) {
+  const mv = azerty ? 'ZQSD' : 'WASD';
+  const turn = azerty ? 'A / E' : 'Q / E';
+  helpEl.innerHTML =
+    `${mv} / flèches — se deplacer&nbsp;&nbsp;|&nbsp;&nbsp;Souris — regarder<br />` +
+    `${turn} — pivoter&nbsp;&nbsp;|&nbsp;&nbsp;Espace — sauter&nbsp;&nbsp;|&nbsp;&nbsp;Maj — courir<br />` +
+    `F — voler&nbsp;&nbsp;|&nbsp;&nbsp;Echap — pause / reprise`;
+}
 
 // Le jeu tourne si la souris est verrouillee (bureau) ou si le mode tactile est actif.
 function isActive() {
@@ -200,6 +213,7 @@ function applySetting(k, v) {
     case 'combat': combat.setEnabled(v); touch.setCombat(v); break;
     case 'touch': applyTouchMode(v); break;
     case 'torch': env.setTorch(v); break;
+    case 'azerty': updateControlsHelp(v); break;
     case 'pixelScale': applyPixelScale(v); break;
     case 'audio': wind.setEnabled(v); break;
     default: break; // dayNightAuto / timeOfDay : lus dans la boucle

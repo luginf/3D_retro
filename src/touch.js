@@ -1,21 +1,45 @@
 import * as THREE from 'three';
 
-// Commandes tactiles pour smartphone / tablette :
+// Commandes tactiles (smartphone / tablette) :
 // - joystick virtuel (bas gauche) pour se deplacer,
-// - glissement sur l'ecran (cote droit) pour regarder,
-// - boutons (saut, tir, monter/descendre en vol).
-// Pas de pointer lock : on oriente la camera directement.
+// - glissement sur l'ecran pour regarder,
+// - boutons (saut, tir, monter/descendre, pause).
+// Les controles sont dessines sur des canvas basse resolution puis agrandis
+// (image-rendering: pixelated) pour coller a la resolution du slider "Pixels".
 const LOOK_SENS = 0.0042;
 const JOY_RADIUS = 55;
 const PITCH_LIMIT = 1.5;
+const JOY = 132;
+const KNOB = 58;
+const BTN = 64;
+const PAUSE = 48;
+
+function drawDisc(ctx, n, fill, stroke, glyph, glyphColor) {
+  ctx.clearRect(0, 0, n, n);
+  const c = n / 2;
+  const r = n / 2 - 1;
+  ctx.fillStyle = fill;
+  ctx.beginPath(); ctx.arc(c, c, r, 0, Math.PI * 2); ctx.fill();
+  ctx.lineWidth = Math.max(1, Math.round(n * 0.08));
+  ctx.strokeStyle = stroke;
+  ctx.beginPath(); ctx.arc(c, c, r - ctx.lineWidth / 2, 0, Math.PI * 2); ctx.stroke();
+  if (glyph) {
+    ctx.fillStyle = glyphColor || '#cfe6f5';
+    ctx.font = `bold ${Math.round(n * 0.5)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(glyph, c, c + n * 0.04);
+  }
+}
 
 export class TouchControls {
   constructor(camera, player, lookTarget, callbacks = {}) {
     this.camera = camera;
     this.player = player;
-    this.lookTarget = lookTarget; // element ou capter le glissement (le canvas)
+    this.lookTarget = lookTarget;
     this.cb = callbacks;
     this.enabled = false;
+    this.scale = 0.5; // resolution interne des controles (= slider Pixels)
 
     this.yaw = 0;
     this.pitch = 0;
@@ -23,17 +47,24 @@ export class TouchControls {
     this.lastX = 0;
     this.lastY = 0;
     this._euler = new THREE.Euler(0, 0, 0, 'YXZ');
+    this._controls = []; // { cv, size, opts, fixedSize }
 
     this._buildDOM();
+    this._redraw();
     this._wireJoystick();
     this._wireLook();
   }
 
-  _btn(label, cls) {
-    const b = document.createElement('button');
-    b.className = `touch-btn ${cls || ''}`;
-    b.textContent = label;
-    return b;
+  _ctl(cls, size, opts, fixedSize) {
+    const el = document.createElement('div');
+    el.className = `touch-ctl ${cls}`;
+    el.style.width = `${size}px`;
+    el.style.height = `${size}px`;
+    const cv = document.createElement('canvas');
+    cv.className = 'touch-bg';
+    el.appendChild(cv);
+    this._controls.push({ cv, size, opts, fixedSize: !!fixedSize });
+    return el;
   }
 
   _buildDOM() {
@@ -41,26 +72,29 @@ export class TouchControls {
     this.root.id = 'touch';
     this.root.style.display = 'none';
 
-    // Joystick.
-    this.joyBase = document.createElement('div');
-    this.joyBase.className = 'touch-joy';
-    this.joyKnob = document.createElement('div');
-    this.joyKnob.className = 'touch-knob';
+    // Joystick : base + pommeau (canvas separe, deplace en transform).
+    this.joyBase = this._ctl('touch-joy', JOY,
+      { fill: 'rgba(10,28,46,0.5)', stroke: 'rgba(127,194,230,0.85)' });
+    this.joyKnob = document.createElement('canvas');
+    this.joyKnob.className = 'touch-knob-cv';
+    this.joyKnob.style.width = `${KNOB}px`;
+    this.joyKnob.style.height = `${KNOB}px`;
+    this.joyKnob.style.left = '50%';
+    this.joyKnob.style.top = '50%';
+    this.joyKnob.style.transform = 'translate(-50%, -50%)';
     this.joyBase.appendChild(this.joyKnob);
+    this._controls.push({ cv: this.joyKnob, size: KNOB, opts: { fill: 'rgba(127,194,230,0.9)', stroke: '#2f7fb5' }, fixedSize: true });
     this.root.appendChild(this.joyBase);
 
-    // Boutons d'action (bas droite).
-    this.btnJump = this._btn('⤒', 'touch-jump');
-    this.btnFire = this._btn('●', 'touch-fire');
-    this.btnUp = this._btn('▲', 'touch-up');
-    this.btnDown = this._btn('▼', 'touch-down');
+    this.btnFire = this._ctl('touch-fire', BTN, { fill: 'rgba(74,26,26,0.75)', stroke: '#bb3355', glyph: '●', glyphColor: '#ffd0c4' });
+    this.btnJump = this._ctl('touch-jump', BTN, { fill: 'rgba(12,34,54,0.7)', stroke: '#2f7fb5', glyph: '↑' });
+    this.btnUp = this._ctl('touch-up', BTN, { fill: 'rgba(12,34,54,0.7)', stroke: '#2f7fb5', glyph: '▲' });
+    this.btnDown = this._ctl('touch-down', BTN, { fill: 'rgba(12,34,54,0.7)', stroke: '#2f7fb5', glyph: '▼' });
+    this.btnPause = this._ctl('touch-pause', PAUSE, { fill: 'rgba(12,34,54,0.7)', stroke: '#2f7fb5', glyph: 'II' });
     this.root.appendChild(this.btnFire);
     this.root.appendChild(this.btnJump);
     this.root.appendChild(this.btnUp);
     this.root.appendChild(this.btnDown);
-
-    // Pause (haut gauche).
-    this.btnPause = this._btn('II', 'touch-pause');
     this.root.appendChild(this.btnPause);
 
     this.btnFire.style.display = 'none';
@@ -76,6 +110,21 @@ export class TouchControls {
     this.btnPause.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.cb.onPause?.(); });
   }
 
+  // Redessine tous les canvas a la resolution interne courante (this.scale).
+  _redraw() {
+    for (const e of this._controls) {
+      const n = Math.max(8, Math.round(e.size * this.scale));
+      e.cv.width = n;
+      e.cv.height = n;
+      drawDisc(e.cv.getContext('2d'), n, e.opts.fill, e.opts.stroke, e.opts.glyph, e.opts.glyphColor);
+    }
+  }
+
+  setPixelScale(s) {
+    this.scale = s;
+    this._redraw();
+  }
+
   _hold(el, down, up) {
     el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); down(); });
     el.addEventListener('pointerup', (e) => { e.preventDefault(); up(); });
@@ -83,47 +132,47 @@ export class TouchControls {
     el.addEventListener('pointerleave', up);
   }
 
+  // Suivi global par pointerId (sans setPointerCapture, capricieux sur mobile).
   _wireJoystick() {
-    let active = false;
-    const rect = () => this.joyBase.getBoundingClientRect();
-    const set = (cx, cy) => {
-      const r = rect();
+    let joyId = null;
+    const move = (cx, cy) => {
+      const r = this.joyBase.getBoundingClientRect();
       let dx = cx - (r.left + r.width / 2);
       let dy = cy - (r.top + r.height / 2);
       const len = Math.hypot(dx, dy) || 1;
       const cl = Math.min(len, JOY_RADIUS);
       dx = (dx / len) * cl;
       dy = (dy / len) * cl;
-      this.joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+      this.joyKnob.style.transform = `translate(-50%, -50%) translate(${dx}px, ${dy}px)`;
       this.player.touch.r = dx / JOY_RADIUS;
       this.player.touch.f = -dy / JOY_RADIUS;
     };
     const reset = () => {
-      active = false;
-      this.joyKnob.style.transform = 'translate(0,0)';
+      joyId = null;
+      this.joyKnob.style.transform = 'translate(-50%, -50%)';
       this.player.touch.r = 0;
       this.player.touch.f = 0;
     };
     this.joyBase.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); e.stopPropagation();
-      active = true;
-      this.joyBase.setPointerCapture(e.pointerId);
-      set(e.clientX, e.clientY);
+      if (!this.enabled || joyId !== null) return;
+      e.preventDefault();
+      e.stopPropagation();
+      joyId = e.pointerId;
+      move(e.clientX, e.clientY);
     });
-    this.joyBase.addEventListener('pointermove', (e) => { if (active) set(e.clientX, e.clientY); });
-    this.joyBase.addEventListener('pointerup', reset);
-    this.joyBase.addEventListener('pointercancel', reset);
+    window.addEventListener('pointermove', (e) => { if (e.pointerId === joyId) move(e.clientX, e.clientY); });
+    window.addEventListener('pointerup', (e) => { if (e.pointerId === joyId) reset(); });
+    window.addEventListener('pointercancel', (e) => { if (e.pointerId === joyId) reset(); });
   }
 
   _wireLook() {
-    const t = this.lookTarget;
-    t.addEventListener('pointerdown', (e) => {
+    this.lookTarget.addEventListener('pointerdown', (e) => {
       if (!this.enabled || this.lookId !== null) return;
       this.lookId = e.pointerId;
       this.lastX = e.clientX;
       this.lastY = e.clientY;
     });
-    t.addEventListener('pointermove', (e) => {
+    window.addEventListener('pointermove', (e) => {
       if (!this.enabled || e.pointerId !== this.lookId) return;
       this.yaw -= (e.clientX - this.lastX) * LOOK_SENS;
       this.pitch -= (e.clientY - this.lastY) * LOOK_SENS;
@@ -134,15 +183,14 @@ export class TouchControls {
       this.camera.quaternion.setFromEuler(this._euler);
     });
     const end = (e) => { if (e.pointerId === this.lookId) this.lookId = null; };
-    t.addEventListener('pointerup', end);
-    t.addEventListener('pointercancel', end);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
   }
 
   setEnabled(b) {
     this.enabled = b;
     this.root.style.display = b ? 'block' : 'none';
     if (b) {
-      // Reprend l'orientation actuelle de la camera.
       this._euler.setFromQuaternion(this.camera.quaternion, 'YXZ');
       this.yaw = this._euler.y;
       this.pitch = this._euler.x;
@@ -155,11 +203,11 @@ export class TouchControls {
   }
 
   setFlying(b) {
-    this.btnUp.style.display = b ? 'flex' : 'none';
-    this.btnDown.style.display = b ? 'flex' : 'none';
+    this.btnUp.style.display = b ? 'block' : 'none';
+    this.btnDown.style.display = b ? 'block' : 'none';
   }
 
   setCombat(b) {
-    this.btnFire.style.display = b ? 'flex' : 'none';
+    this.btnFire.style.display = b ? 'block' : 'none';
   }
 }

@@ -6,6 +6,7 @@ const WALK_SPEED = 9;
 const RUN_SPEED = 16;
 const GRAVITY = 26;
 const JUMP_SPEED = 9;
+const TURN_SPEED = 2.0; // rad/s pour le pivot clavier
 
 // Sur un terrain heightmap, le joueur suit la surface : pas de murs a gerer,
 // juste la gravite et le collage au sol.
@@ -45,11 +46,19 @@ export class Player {
   }
 
   update(dt) {
-    if (!this.controls.isLocked) return;
+    // Pas de garde sur le pointer lock ici : la boucle (main) ne nous appelle
+    // que lorsque le jeu est actif (souris verrouillee OU mode tactile).
     dt = Math.min(dt, 0.05);
 
-    const f = (this.keys['KeyW'] || this.keys['KeyZ'] ? 1 : 0) - (this.keys['KeyS'] ? 1 : 0) + this.touch.f;
-    const r = (this.keys['KeyD'] ? 1 : 0) - (this.keys['KeyA'] || this.keys['KeyQ'] ? 1 : 0) + this.touch.r;
+    // Pivot (lacet) sur soi-meme : Q/E (= A/E en AZERTY, memes touches physiques)
+    // ou fleches gauche/droite. Rotation autour de l'axe vertical monde.
+    const turn = (this.keys['KeyE'] || this.keys['ArrowRight'] ? 1 : 0)
+      - (this.keys['KeyQ'] || this.keys['ArrowLeft'] ? 1 : 0);
+    if (turn !== 0) this.camera.rotateOnWorldAxis(this._up, -turn * TURN_SPEED * dt);
+
+    const f = (this.keys['KeyW'] || this.keys['ArrowUp'] ? 1 : 0)
+      - (this.keys['KeyS'] || this.keys['ArrowDown'] ? 1 : 0) + this.touch.f;
+    const r = (this.keys['KeyD'] ? 1 : 0) - (this.keys['KeyA'] ? 1 : 0) + this.touch.r;
 
     if (this.flying) {
       this._fly(f, r, dt);

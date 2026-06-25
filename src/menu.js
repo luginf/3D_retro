@@ -15,6 +15,7 @@ const TOGGLES = [
   ['flying', 'Vol (touche F)'],
   ['combat', 'Combat'],
   ['touch', 'Commandes tactiles'],
+  ['azerty', 'Clavier AZERTY'],
   ['hud', 'Infos FPS'],
 ];
 
