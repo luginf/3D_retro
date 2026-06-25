@@ -20,6 +20,9 @@ export class Player {
     this.onGround = false;
     this.flying = false;
 
+    // Entrees tactiles (joystick + boutons), additionnees au clavier.
+    this.touch = { f: 0, r: 0, up: 0, jump: false };
+
     this.keys = Object.create(null);
     this._forward = new THREE.Vector3();
     this._right = new THREE.Vector3();
@@ -45,8 +48,8 @@ export class Player {
     if (!this.controls.isLocked) return;
     dt = Math.min(dt, 0.05);
 
-    const f = (this.keys['KeyW'] || this.keys['KeyZ'] ? 1 : 0) - (this.keys['KeyS'] ? 1 : 0);
-    const r = (this.keys['KeyD'] ? 1 : 0) - (this.keys['KeyA'] || this.keys['KeyQ'] ? 1 : 0);
+    const f = (this.keys['KeyW'] || this.keys['KeyZ'] ? 1 : 0) - (this.keys['KeyS'] ? 1 : 0) + this.touch.f;
+    const r = (this.keys['KeyD'] ? 1 : 0) - (this.keys['KeyA'] || this.keys['KeyQ'] ? 1 : 0) + this.touch.r;
 
     if (this.flying) {
       this._fly(f, r, dt);
@@ -70,7 +73,7 @@ export class Player {
     p.z += this._wish.z * speed * dt;
 
     this.velocity.y -= GRAVITY * dt;
-    if (this.keys['Space'] && this.onGround) {
+    if ((this.keys['Space'] || this.touch.jump) && this.onGround) {
       this.velocity.y = JUMP_SPEED;
       this.onGround = false;
     }
@@ -94,7 +97,8 @@ export class Player {
     this.camera.getWorldDirection(this._forward);
     this._right.crossVectors(this._forward, this._up).normalize();
     const up = (this.keys['Space'] ? 1 : 0)
-      - (this.keys['ControlLeft'] || this.keys['KeyC'] ? 1 : 0);
+      - (this.keys['ControlLeft'] || this.keys['KeyC'] ? 1 : 0)
+      + this.touch.up;
 
     this._wish.set(0, 0, 0)
       .addScaledVector(this._forward, f)

@@ -8,6 +8,11 @@ relief** (heightmap chargeable ou peinte).
 
 Stack : **Three.js**, **Vite**, **simplex-noise**.
 
+## Online version
+
+- https://luginf.github.io
+
+
 ## Démarrer
 
 ```bash

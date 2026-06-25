@@ -49,6 +49,43 @@
         position: absolute; left: 10px; bottom: 10px;
         font-family: "Courier New", monospace; font-size: 12px;
         color: #f0f0f0; text-shadow: 1px 1px 0 #000; z-index: 5;
+        pointer-events: none; /* ne bloque pas le glissement tactile */
+      }
+
+      #combat-hud {
+        position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+        font-family: "Courier New", monospace; font-size: 13px; letter-spacing: 1px;
+        color: #ffe9b0; text-shadow: 1px 1px 0 #000; z-index: 6;
+        background: rgba(10, 28, 46, 0.6); border: 2px solid #2f7fb5; padding: 4px 10px;
+        pointer-events: none;
+      }
+
+      /* --- Commandes tactiles --- */
+      #touch { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+      #touch > * { pointer-events: auto; touch-action: none; }
+      .touch-joy {
+        position: absolute; left: 24px; bottom: 24px; width: 130px; height: 130px;
+        border-radius: 50%; border: 3px solid rgba(127, 194, 230, 0.7);
+        background: rgba(10, 28, 46, 0.35);
+        display: flex; align-items: center; justify-content: center;
+      }
+      .touch-knob {
+        width: 56px; height: 56px; border-radius: 50%;
+        background: rgba(127, 194, 230, 0.8); border: 2px solid #2f7fb5;
+      }
+      .touch-btn {
+        position: absolute; width: 64px; height: 64px; border-radius: 50%;
+        font-family: "Courier New", monospace; font-size: 22px; color: #cfe6f5;
+        background: rgba(12, 34, 54, 0.7); border: 3px solid #2f7fb5;
+        display: flex; align-items: center; justify-content: center; user-select: none;
+      }
+      .touch-btn:active { background: rgba(47, 127, 181, 0.7); }
+      .touch-jump { right: 28px; bottom: 32px; }
+      .touch-fire { right: 104px; bottom: 64px; background: rgba(74, 26, 26, 0.7); border-color: #b35; color: #ffd0c4; }
+      .touch-up { right: 110px; bottom: 140px; }
+      .touch-down { right: 28px; bottom: 140px; }
+      .touch-pause {
+        left: 16px; top: 16px; width: 48px; height: 48px; font-size: 16px;
       }
 
       /* --- Menu pixel-art (bas a droite) --- */
@@ -125,7 +162,7 @@
       <h1>VECTOR WORLD</h1>
       <p>
         ZQSD / WASD — se deplacer&nbsp;&nbsp;|&nbsp;&nbsp;Souris — regarder<br />
-        Espace — sauter&nbsp;&nbsp;|&nbsp;&nbsp;Maj — courir&nbsp;&nbsp;|&nbsp;&nbsp;Echap — liberer la souris<br />
+        Espace — sauter&nbsp;&nbsp;|&nbsp;&nbsp;Maj — courir&nbsp;&nbsp;|&nbsp;&nbsp;Echap — pause / reprise<br />
         F — voler&nbsp;&nbsp;(en vol : Espace monter, Ctrl/C descendre)
       </p>
       <div class="start">Cliquer pour entrer dans le monde</div>

@@ -8,7 +8,13 @@ import { Environment } from './environment.js';
 import { WindAudio } from './audio.js';
 import { buildMenu } from './menu.js';
 import { createHeightmapEditor } from './heightmap.js';
+import { Combat } from './combat.js';
+import { TouchControls } from './touch.js';
 import { WATER_LEVEL } from './config.js';
+
+// Tactile par defaut si l'entree principale est "grossiere" (doigt) : vise
+// telephones / tablettes, pas les PC a ecran tactile avec souris.
+const IS_TOUCH = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
 
 const FOG_GREY = 0x808080;
 
@@ -16,7 +22,8 @@ const FOG_GREY = 0x808080;
 const DEFAULTS = {
   wireframe: true, dither: true, colorMode: false, scanlines: true, vignette: true,
   trees: true, water: true, clouds: true, audio: false,
-  dayNightAuto: true, hud: true, flying: false, timeOfDay: 0.3, pixelScale: 0.5,
+  dayNightAuto: true, hud: true, flying: false, combat: false, touch: IS_TOUCH,
+  torch: true, timeOfDay: 0.3, pixelScale: 0.5,
 };
 function loadSettings() {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('vw-settings') || '{}') }; }
@@ -61,6 +68,13 @@ world.update(player.position);
 
 const env = new Environment(scene, camera);
 env.setCloudsVisible(settings.clouds);
+
+const combat = new Combat(scene, camera, world, player);
+
+const touch = new TouchControls(camera, player, renderer.domElement, {
+  onFire: () => combat.fire(),
+  onPause: () => pauseGame(),
+});
 
 // --- Eau -----------------------------------------------------------------
 const waterMat = new THREE.ShaderMaterial({
@@ -113,12 +127,58 @@ const editor = createHeightmapEditor((getHeightFn) => {
 // --- DOM -----------------------------------------------------------------
 const overlay = document.getElementById('overlay');
 const hud = document.getElementById('hud');
-overlay.addEventListener('click', () => {
-  player.controls.lock();
+const startEl = overlay.querySelector('.start');
+let started = false;
+let lastUnlock = 0;
+let touchActive = false; // etat "en jeu" en mode tactile (sans pointer lock)
+
+// Le jeu tourne si la souris est verrouillee (bureau) ou si le mode tactile est actif.
+function isActive() {
+  return settings.touch ? touchActive : player.controls.isLocked;
+}
+
+function enterGame() {
+  if (settings.touch) {
+    touchActive = true;
+    started = true;
+    overlay.classList.add('hidden');
+    touch.setEnabled(true);
+  } else {
+    player.controls.lock();
+  }
   if (settings.audio) wind.setEnabled(true);
+}
+
+function pauseGame() {
+  if (settings.touch) {
+    touchActive = false;
+    touch.setEnabled(false);
+    overlay.classList.remove('hidden');
+    if (started) startEl.textContent = 'PAUSE — toucher pour reprendre';
+  } else {
+    player.controls.unlock();
+  }
+}
+
+overlay.addEventListener('click', enterGame);
+player.controls.addEventListener('lock', () => { overlay.classList.add('hidden'); started = true; });
+player.controls.addEventListener('unlock', () => {
+  overlay.classList.remove('hidden');
+  lastUnlock = performance.now();
+  // Echap -> pause : la boucle gele tant que la souris n'est pas reverrouillee.
+  if (started) startEl.textContent = 'PAUSE — Échap ou clic pour reprendre';
 });
-player.controls.addEventListener('lock', () => overlay.classList.add('hidden'));
-player.controls.addEventListener('unlock', () => overlay.classList.remove('hidden'));
+
+// Echap bascule la pause. La reprise se fait sur le RELACHEMENT (keyup) d'Echap :
+// demander le verrouillage pendant le keydown d'Echap echoue, car c'est la touche
+// que le navigateur utilise pour sortir du pointer lock (il relock puis ressort).
+// La garde (400 ms) ignore le keyup de l'appui qui vient justement de mettre en pause.
+addEventListener('keyup', (e) => {
+  if (e.code === 'Escape' && started && !player.controls.isLocked
+      && performance.now() - lastUnlock > 400) {
+    enterGame();
+  }
+});
 
 // --- Application des reglages ---------------------------------------------
 function applySetting(k, v) {
@@ -136,10 +196,26 @@ function applySetting(k, v) {
     case 'scanlines': dither.uniforms.uScanline.value = v ? 1 : 0; break;
     case 'vignette': dither.uniforms.uVignette.value = v ? 1 : 0; break;
     case 'hud': hud.style.display = v ? 'block' : 'none'; break;
-    case 'flying': player.setFlying(v); break;
+    case 'flying': player.setFlying(v); touch.setFlying(v); break;
+    case 'combat': combat.setEnabled(v); touch.setCombat(v); break;
+    case 'touch': applyTouchMode(v); break;
+    case 'torch': env.setTorch(v); break;
     case 'pixelScale': applyPixelScale(v); break;
     case 'audio': wind.setEnabled(v); break;
     default: break; // dayNightAuto / timeOfDay : lus dans la boucle
+  }
+}
+
+// Bascule du mode tactile : on remet le jeu en pause proprement et on synchronise
+// l'affichage des boutons selon vol / combat.
+function applyTouchMode(v) {
+  if (v) {
+    if (player.controls.isLocked) player.controls.unlock();
+    touch.setFlying(settings.flying);
+    touch.setCombat(settings.combat);
+  } else {
+    touchActive = false;
+    touch.setEnabled(false);
   }
 }
 // Application initiale (sauf audio : necessite un geste utilisateur).
@@ -174,7 +250,7 @@ addEventListener('resize', () => {
 
 // --- Boucle --------------------------------------------------------------
 const clock = new THREE.Clock();
-const nightTint = new THREE.Color(0.55, 0.5, 0.85);
+const nightTint = new THREE.Color(0.7, 0.68, 0.92);
 const dayTint = new THREE.Color(1, 1, 1);
 let hudTimer = 0;
 
@@ -182,17 +258,22 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = clock.getDelta();
 
-  if (settings.dayNightAuto) settings.timeOfDay = (settings.timeOfDay + dt * 0.012) % 1;
+  // Pause : hors jeu (Echap au clavier, ou pause tactile). On rend la scene
+  // mais on ne met rien a jour (joueur, monde, combat, jour/nuit figes).
+  if (!isActive()) { composer.render(); return; }
+
+  if (settings.dayNightAuto) settings.timeOfDay = (settings.timeOfDay + dt * 0.003) % 1;
 
   player.update(dt);
   world.update(player.position);
+  combat.update(dt);
 
   water.position.x = player.position.x;
   water.position.z = player.position.z;
   waterMat.uniforms.uTime.value += dt;
 
   const day = env.update(dt, settings.timeOfDay);
-  dither.uniforms.uBrightness.value = 0.4 + day * 0.6;
+  dither.uniforms.uBrightness.value = 0.58 + day * 0.42; // nuit moins sombre
   dither.uniforms.uTint.value.copy(nightTint).lerp(dayTint, day);
 
   hudTimer += dt;

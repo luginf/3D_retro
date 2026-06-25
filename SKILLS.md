@@ -19,7 +19,10 @@ Clique sur l'écran pour verrouiller la souris et commencer.
 | `Maj` | Courir (ou boost en vol) |
 | `F` | Activer/couper le **vol** |
 | `Espace` / `Ctrl` ou `C` | Monter / descendre (en vol) |
-| `Échap` | Libérer la souris |
+| **Clic droit** | Attaquer (mode Combat) |
+| **Molette** / `1` `2` | Changer d'arme : pistolet ↔ épée (mode Combat) |
+| `R` | Recharger le pistolet (mode Combat) |
+| `Échap` | **Pause / reprise** (bascule, sans cliquer) |
 
 ## 3. Le menu (bouton `▤ MENU`, bas à droite)
 
@@ -37,7 +40,21 @@ Tout se règle en direct, sans toucher au code. Les choix sont **mémorisés**
 - **Eau** — plan d'eau animé
 - **Nuages** — nuages low-poly dérivants
 - **Vent (son)** — ambiance sonore procédurale
-- **Cycle jour/nuit** — animation automatique du soleil
+- **Vol** — déplacement libre sans gravité (aussi touche `F`)
+- **Combat** — des animaux apparaissent : certains te **chassent**, d'autres
+  **errent** dans le paysage. Trois types : *normal*, *rapide* (rougeâtre),
+  *costaud* (gris, encaisse plusieurs coups). Ils ne te blessent qu'au **contact
+  réel** (donc en vol, ceux au sol ne t'atteignent pas). Tire au
+  **clic droit** avec le **pistolet** (munitions, `R` pour recharger, recharge
+  auto si vide, léger recul). HUD en haut : arme, munitions, score, PV. Sons
+  procéduraux. *(L'épée est désactivée pour le moment — le code est conservé,
+  remettre `swordEnabled = true` dans `combat.js` pour la réactiver.)*
+- **Commandes tactiles** — pour smartphone/tablette : joystick virtuel (bas
+  gauche) pour se déplacer, **glissement** sur l'écran pour viser, boutons saut /
+  tir / monter-descendre, bouton pause. Activé automatiquement sur écran tactile,
+  ou via le menu sur n'importe quel appareil.
+- **Cycle jour/nuit** — animation automatique du soleil (et de la lune la nuit)
+- **Torche** — lumière chaude qui éclaire les environs proches, forte la nuit
 - **Infos FPS** — HUD en bas à gauche
 
 **Pixels** — curseur de précision : à gauche = gros pixels (très rétro, tramage
@@ -83,7 +100,8 @@ grossier), à droite = net. Règle la résolution interne du rendu.
 `src/main.js`
 - `RETRO_SCALE` — taille des pixels (0.5 = rétro, 1 = net)
 - `scene.fog` — distance de l'horizon
-- vitesse du cycle jour/nuit : le `* 0.012` dans la boucle
+- vitesse du cycle jour/nuit : le `* 0.003` dans la boucle (plus haut = plus rapide)
+- intensité/portée de la torche : `this.torch` dans `environment.js`
 
 ## 6. Dépannage
 

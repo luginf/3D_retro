@@ -54,9 +54,26 @@ export class Environment {
     this.sunMesh.frustumCulled = false;
     scene.add(this.sunMesh);
 
+    // Lune : opposee au soleil, visible la nuit.
+    this.moonMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(12, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0xcdd8e6 }),
+    );
+    this.moonMesh.frustumCulled = false;
+    scene.add(this.moonMesh);
+
+    // Torche : lumiere ponctuelle chaude qui suit le joueur (forte la nuit).
+    // Portee triplee (165) + decroissance plus douce pour eclairer plus loin.
+    this.torchOn = true;
+    this.torch = new THREE.PointLight(0xffce9a, 0, 165, 1.3);
+    this.torch.position.set(0, 0.3, 0);
+    camera.add(this.torch);
+
     this.clouds = [];
     this._initClouds();
   }
+
+  setTorch(b) { this.torchOn = b; }
 
   _initClouds() {
     const parts = [];
@@ -89,13 +106,19 @@ export class Environment {
 
     this.sun.position.copy(this.sunDir).multiplyScalar(100);
     this.sun.intensity = Math.max(0, sh) * 1.1 + 0.05;
-    this.ambient.intensity = 0.12 + day * 0.3;
+    this.ambient.intensity = 0.3 + day * 0.25; // nuit moins sombre
     this.skyMat.uniforms.uDay.value = day;
+
+    // Torche : intense la nuit, eteinte en plein jour. Intensite relevee pour
+    // compenser la portee accrue (decroissance en distance).
+    this.torch.intensity = this.torchOn ? (1 - day) * 90 + 8 : 0;
 
     this.camera.getWorldPosition(this._camPos);
     this.sky.position.copy(this._camPos);
     this.sunMesh.position.copy(this._camPos).addScaledVector(this.sunDir, 380);
     this.sunMesh.visible = sh > -0.05;
+    this.moonMesh.position.copy(this._camPos).addScaledVector(this.sunDir, -380);
+    this.moonMesh.visible = sh < 0.12; // visible quand le soleil est bas/couche
 
     for (const c of this.clouds) {
       c.position.x += dt * 4;

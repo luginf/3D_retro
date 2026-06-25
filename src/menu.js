@@ -11,7 +11,10 @@ const TOGGLES = [
   ['clouds', 'Nuages'],
   ['audio', 'Vent (son)'],
   ['dayNightAuto', 'Cycle jour/nuit'],
+  ['torch', 'Torche'],
   ['flying', 'Vol (touche F)'],
+  ['combat', 'Combat'],
+  ['touch', 'Commandes tactiles'],
   ['hud', 'Infos FPS'],
 ];
 
