@@ -3,14 +3,15 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { World } from './world.js';
 import { Player } from './player.js';
-import { makeDitherPass } from './dither.js';
+import { makeDitherPass, makeDitherShader } from './dither.js';
+import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { Environment } from './environment.js';
 import { WindAudio } from './audio.js';
 import { buildMenu } from './menu.js';
 import { createHeightmapEditor } from './heightmap.js';
 import { Combat } from './combat.js';
 import { TouchControls } from './touch.js';
-import { WATER_LEVEL } from './config.js';
+import { WATER_LEVEL, SNOW_LINE, HEIGHT_AMP } from './config.js';
 
 // Tactile par defaut si l'entree principale est "grossiere" (doigt) : vise
 // telephones / tablettes, pas les PC a ecran tactile avec souris.
@@ -24,7 +25,7 @@ const DEFAULTS = {
   wireframe: true, dither: true, colorMode: false, scanlines: true, vignette: true,
   trees: true, water: true, clouds: true, audio: false,
   dayNightAuto: true, hud: true, flying: false, combat: false, touch: IS_TOUCH,
-  torch: true, azerty: IS_FR, timeOfDay: 0.3, pixelScale: 0.5,
+  torch: true, azerty: IS_FR, timeOfDay: 0.3, pixelScale: 0.5, minimap: true, minimapDither: true,
 };
 function loadSettings() {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('vw-settings') || '{}') }; }
@@ -104,6 +105,125 @@ water.position.y = WATER_LEVEL;
 water.visible = settings.water;
 scene.add(water);
 
+// --- Mini-carte (incrustee bas-gauche, touche M) --------------------------
+// Camera orthographique vue du dessus. Un materiau "heightfield" remplace tous
+// les materiaux de la scene (scene.overrideMaterial) : couleur = temperature
+// selon l'altitude (bleu froid/eau -> rouge chaud/sommets), independante de la
+// lumiere/jour-nuit. Nuages masques (pas pertinents en vue de dessus). Rendue
+// dans une cible basse resolution puis reaffichee via le meme tramage/palette/
+// scanlines que l'ecran de jeu (viewport/scissor reduit, apres le composer) :
+// meme "grain" retro que le reste de l'ecran.
+const MINIMAP_RADIUS = 110; // demi-etendue (unites monde) visible sur la carte
+const minimapCamera = new THREE.OrthographicCamera(
+  -MINIMAP_RADIUS, MINIMAP_RADIUS, MINIMAP_RADIUS, -MINIMAP_RADIUS, 1, 1000,
+);
+minimapCamera.up.set(0, 0, -1); // nord (-Z, direction par defaut du joueur) en haut
+const minimapEl = document.getElementById('minimap');
+const minimapPlayerEl = document.getElementById('minimap-player');
+const mmDir = new THREE.Vector3();
+
+// Fleche du joueur : dessinee en pixel-art (escalier net, pointe fine) plutot qu'un
+// triangle CSS lisse, pour rester coherente avec le rendu pixelise du reste du jeu.
+const ARROW_W = minimapPlayerEl.width;
+const ARROW_ROWS = [1, 1, 3, 3, 5, 5, 7, 7, 7]; // largeur (px) de chaque ligne, sommet -> base
+const mmArrowCtx = minimapPlayerEl.getContext('2d');
+mmArrowCtx.fillStyle = '#ffe9b0';
+ARROW_ROWS.forEach((w, y) => mmArrowCtx.fillRect((ARROW_W - w) / 2, y, w, 1));
+
+const minimapMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uH0: { value: WATER_LEVEL - 10 }, // en dessous : bleu profond
+    uH1: { value: WATER_LEVEL + 2 }, // niveau de l'eau -> debut des plaines
+    uH2: { value: SNOW_LINE * 0.6 }, // plaines -> collines
+    uH3: { value: SNOW_LINE }, // collines -> sommets
+    uH4: { value: HEIGHT_AMP }, // rouge sature au-dela
+  },
+  vertexShader: /* glsl */ `
+    varying float vHeight;
+    void main() {
+      #ifdef USE_INSTANCING
+        vec4 worldPosition = modelMatrix * instanceMatrix * vec4(position, 1.0);
+      #else
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+      #endif
+      vHeight = worldPosition.y;
+      gl_Position = projectionMatrix * viewMatrix * worldPosition;
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform float uH0, uH1, uH2, uH3, uH4;
+    varying float vHeight;
+    void main() {
+      vec3 c0 = vec3(0.02, 0.05, 0.25); // eau profonde
+      vec3 c1 = vec3(0.10, 0.35, 0.65); // eau
+      vec3 c2 = vec3(0.15, 0.55, 0.20); // plaines
+      vec3 c3 = vec3(0.80, 0.55, 0.10); // collines
+      vec3 c4 = vec3(0.85, 0.15, 0.10); // sommets
+      vec3 col;
+      if (vHeight < uH1) col = mix(c0, c1, smoothstep(uH0, uH1, vHeight));
+      else if (vHeight < uH2) col = mix(c1, c2, smoothstep(uH1, uH2, vHeight));
+      else if (vHeight < uH3) col = mix(c2, c3, smoothstep(uH2, uH3, vHeight));
+      else col = mix(c3, c4, smoothstep(uH3, uH4, vHeight));
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `,
+});
+
+// Cible basse resolution (rendu 3D de la carte avant post-traitement retro).
+// Filtrage "nearest" -> pixels bien visibles une fois agrandie, comme le canvas principal.
+const mmTarget = new THREE.WebGLRenderTarget(2, 2, {
+  minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+});
+
+// Meme recette de tramage/palette/scanlines que l'ecran de jeu (dither.js), mais en
+// mode "couleurs" force (on veut voir le degrade de temperature, pas la palette bleue
+// monochrome) et sans assombrissement jour/nuit (la carte doit rester lisible de nuit).
+const minimapDitherMat = new THREE.ShaderMaterial(makeDitherShader());
+minimapDitherMat.uniforms.tDiffuse.value = mmTarget.texture;
+minimapDitherMat.uniforms.uColorMode.value = 1;
+minimapDitherMat.uniforms.uBrightness.value = 1;
+const mmQuad = new FullScreenQuad(minimapDitherMat);
+
+function renderMinimap() {
+  if (!settings.minimap) return;
+  const size = minimapEl.clientWidth;
+  if (!size) return;
+  const left = minimapEl.offsetLeft;
+  const bottom = innerHeight - minimapEl.offsetTop - minimapEl.clientHeight;
+
+  const res = Math.max(2, Math.round(size * settings.pixelScale));
+  if (mmTarget.width !== res) mmTarget.setSize(res, res);
+
+  minimapCamera.position.set(player.position.x, player.position.y + 260, player.position.z);
+  minimapCamera.lookAt(player.position.x, player.position.y, player.position.z);
+
+  env.setCloudsVisible(false);
+  scene.overrideMaterial = minimapMat;
+  renderer.setRenderTarget(mmTarget);
+  renderer.render(scene, minimapCamera);
+  renderer.setRenderTarget(null);
+  scene.overrideMaterial = null;
+  env.setCloudsVisible(settings.clouds);
+
+  // Tramage de la carte : reglage propre (settings.minimapDither), independant de
+  // celui de l'ecran de jeu. Scanlines/vignette restent alignees sur l'ecran de jeu.
+  minimapDitherMat.uniforms.uDither.value = settings.minimapDither ? 1 : 0;
+  minimapDitherMat.uniforms.uSteps.value = settings.minimapDither ? 4 : 6;
+  minimapDitherMat.uniforms.uScanline.value = dither.uniforms.uScanline.value;
+  minimapDitherMat.uniforms.uVignette.value = dither.uniforms.uVignette.value;
+
+  renderer.setScissorTest(true);
+  renderer.setViewport(left, bottom, size, size);
+  renderer.setScissor(left, bottom, size, size);
+  mmQuad.render(renderer);
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, innerWidth, innerHeight);
+
+  camera.getWorldDirection(mmDir);
+  const yaw = Math.atan2(mmDir.x, -mmDir.z) * 180 / Math.PI;
+  minimapPlayerEl.style.transform = `translate(-50%, -50%) rotate(${yaw}deg)`;
+}
+
 // --- Post-traitement -----------------------------------------------------
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
@@ -117,6 +237,12 @@ function applyPixelScale(v) {
   composer.setPixelRatio(v);
   composer.setSize(innerWidth, innerHeight);
   touch.setPixelScale(v); // controles tactiles a la meme resolution
+
+  // Fleche de la mini-carte : chaque pixel dessine occupe la meme taille CSS
+  // qu'un pixel du rendu principal, pour rester grossiere/nette au meme degre.
+  const px = Math.max(1, Math.round(1 / v));
+  minimapPlayerEl.style.width = `${ARROW_W * px}px`;
+  minimapPlayerEl.style.height = `${ARROW_ROWS.length * px}px`;
 }
 
 // --- Audio + editeur de heightmap ----------------------------------------
@@ -142,7 +268,7 @@ function updateControlsHelp(azerty) {
   helpEl.innerHTML =
     `${mv} / flèches — se deplacer&nbsp;&nbsp;|&nbsp;&nbsp;Souris — regarder<br />` +
     `${turn} — pivoter&nbsp;&nbsp;|&nbsp;&nbsp;Espace — sauter&nbsp;&nbsp;|&nbsp;&nbsp;Maj — courir<br />` +
-    `F — voler&nbsp;&nbsp;|&nbsp;&nbsp;Echap — pause / reprise`;
+    `F — voler&nbsp;&nbsp;|&nbsp;&nbsp;Echap — pause / reprise&nbsp;&nbsp;|&nbsp;&nbsp;M — mini-carte`;
 }
 
 // Le jeu tourne si la souris est verrouillee (bureau) ou si le mode tactile est actif.
@@ -215,8 +341,9 @@ function applySetting(k, v) {
     case 'torch': env.setTorch(v); break;
     case 'azerty': updateControlsHelp(v); break;
     case 'pixelScale': applyPixelScale(v); break;
+    case 'minimap': minimapEl.classList.toggle('hidden', !v); break;
     case 'audio': wind.setEnabled(v); break;
-    default: break; // dayNightAuto / timeOfDay : lus dans la boucle
+    default: break; // dayNightAuto / timeOfDay / minimapDither : lus dans la boucle
   }
 }
 
@@ -246,12 +373,11 @@ const api = {
 };
 const menu = buildMenu(api);
 
-// Touche F : bascule le mode vol (et resynchronise le menu).
+// Touche F : bascule le mode vol. Touche M : bascule la mini-carte. (resynchronise le menu)
 addEventListener('keydown', (e) => {
-  if (e.code === 'KeyF' && e.target.tagName !== 'INPUT') {
-    api.set('flying', !settings.flying);
-    menu.refresh();
-  }
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'KeyF') { api.set('flying', !settings.flying); menu.refresh(); }
+  if (e.code === 'KeyM') { api.set('minimap', !settings.minimap); menu.refresh(); }
 });
 
 // --- Resize --------------------------------------------------------------
@@ -274,7 +400,7 @@ function animate() {
 
   // Pause : hors jeu (Echap au clavier, ou pause tactile). On rend la scene
   // mais on ne met rien a jour (joueur, monde, combat, jour/nuit figes).
-  if (!isActive()) { composer.render(); return; }
+  if (!isActive()) { composer.render(); renderMinimap(); return; }
 
   if (settings.dayNightAuto) settings.timeOfDay = (settings.timeOfDay + dt * 0.003) % 1;
 
@@ -300,5 +426,6 @@ function animate() {
   }
 
   composer.render();
+  renderMinimap();
 }
 animate();

@@ -54,6 +54,20 @@
         pointer-events: none; /* ne bloque pas le glissement tactile */
       }
 
+      /* --- Mini-carte (incrustee, bas gauche, touche M) --- */
+      #minimap {
+        position: absolute; left: 10px; bottom: 34px;
+        width: 33.34vh; height: 33.34vh;
+        border: 2px solid #2f7fb5; box-shadow: 3px 3px 0 #06121d;
+        z-index: 6; pointer-events: none;
+        /* pas de fond : le rendu WebGL (viewport/scissor) est sur le canvas, juste en dessous */
+      }
+      #minimap.hidden { display: none; }
+      #minimap-player {
+        position: absolute; top: 50%; left: 50%;
+        filter: drop-shadow(1px 1px 0 #000);
+      }
+
       #combat-hud {
         position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
         font-family: "Courier New", monospace; font-size: 13px; letter-spacing: 1px;
@@ -152,12 +166,14 @@
   <body>
     <div id="crosshair"></div>
     <div id="hud"></div>
+    <div id="minimap"><canvas id="minimap-player" width="7" height="9"></canvas></div>
     <div id="overlay">
       <h1>VECTOR WORLD</h1>
       <p>
         ZQSD / WASD — se deplacer&nbsp;&nbsp;|&nbsp;&nbsp;Souris — regarder<br />
         Espace — sauter&nbsp;&nbsp;|&nbsp;&nbsp;Maj — courir&nbsp;&nbsp;|&nbsp;&nbsp;Echap — pause / reprise<br />
-        F — voler&nbsp;&nbsp;(en vol : Espace monter, Ctrl/C descendre)
+        F — voler&nbsp;&nbsp;(en vol : Espace monter, Ctrl/C descendre)<br />
+        M — mini-carte
       </p>
       <div class="start">Cliquer pour entrer dans le monde</div>
     </div>

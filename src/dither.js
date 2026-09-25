@@ -33,11 +33,12 @@ function makeBayerTexture(n) {
   return tex;
 }
 
-// Passe finale : luminance -> (tramage) -> palette de bleus, + teinte jour/nuit,
-// + scanlines et vignette CRT (toutes activables).
-export function makeDitherPass() {
+// Recette du shader (uniforms + code) : reutilisee telle quelle par la passe
+// composer principale et par le post-traitement de la mini-carte (main.js),
+// pour que les deux partagent exactement le meme rendu "retro".
+export function makeDitherShader() {
   const N = 8;
-  const shader = {
+  return {
     uniforms: {
       tDiffuse: { value: null },
       uBayer: { value: makeBayerTexture(N) },
@@ -107,5 +108,8 @@ export function makeDitherPass() {
       }
     `,
   };
-  return new ShaderPass(shader);
+}
+
+export function makeDitherPass() {
+  return new ShaderPass(makeDitherShader());
 }

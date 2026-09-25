@@ -10,7 +10,7 @@ Stack : **Three.js**, **Vite**, **simplex-noise**.
 
 ## Online version
 
-- https://luginf.github.io
+- https://luginf.github.io/3D_retro
 
 
 ## Démarrer

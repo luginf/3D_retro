@@ -17,6 +17,8 @@ const TOGGLES = [
   ['touch', 'Commandes tactiles'],
   ['azerty', 'Clavier AZERTY'],
   ['hud', 'Infos FPS'],
+  ['minimap', 'Mini-carte (M)'],
+  ['minimapDither', 'Tramage mini-carte'],
 ];
 
 export function buildMenu(api) {
